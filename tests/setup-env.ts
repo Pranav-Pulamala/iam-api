@@ -4,3 +4,7 @@ process.env.SERVICE_NAME = 'iam-api';
 process.env.LOG_LEVEL = 'silent';
 process.env.DATABASE_URL =
   'postgresql://iam_api:iam_api_dev_password@localhost:5432/iam_api_test?schema=public';
+process.env.JWT_SECRET = 'test-only-jwt-secret-that-is-longer-than-32-characters';
+process.env.JWT_ACCESS_EXPIRES_IN = '15m';
+process.env.JWT_ISSUER = 'iam-api';
+process.env.JWT_AUDIENCE = 'iam-api-client';
