@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: iam-api-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: iam_api
+      POSTGRES_USER: iam_api
+      POSTGRES_PASSWORD: iam_api_dev_password
+    ports:
+      - '5432:5432'
+    volumes:
+      - iam_api_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U iam_api -d iam_api']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - iam_api_network
+
+volumes:
+  iam_api_postgres_data:
+    name: iam-api-postgres-data
+
+networks:
+  iam_api_network:
+    name: iam-api-network
+    driver: bridge
