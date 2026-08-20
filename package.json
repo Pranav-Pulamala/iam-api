@@ -24,7 +24,8 @@
     "prisma:format": "prisma format",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "prisma db seed"
   },
   "dependencies": {
     "@prisma/client": "6.19.0",
@@ -49,6 +50,9 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.48.0",
     "vitest": "3.2.4"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "allowScripts": {
     "@prisma/client@6.19.0": true,
