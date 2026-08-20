@@ -34,21 +34,77 @@ model Organization {
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   memberships Membership[]
+  roles       Role[]
 
   @@map("organizations")
 }
 
 model Membership {
-  id             String         @id @default(uuid()) @db.Uuid
-  userId         String         @map("user_id") @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
-  role           MembershipRole @default(MEMBER)
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id              String                     @id @default(uuid()) @db.Uuid
+  userId          String                     @map("user_id") @db.Uuid
+  organizationId  String                     @map("organization_id") @db.Uuid
+  role            MembershipRole             @default(MEMBER)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user            User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleAssignments MembershipRoleAssignment[]
 
   @@unique([userId, organizationId])
+  @@unique([id, organizationId])
   @@index([organizationId])
   @@map("memberships")
+}
+
+model Role {
+  id              String                     @id @default(uuid()) @db.Uuid
+  organizationId  String                     @map("organization_id") @db.Uuid
+  name            String                     @db.VarChar(100)
+  description     String?                    @db.VarChar(500)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  assignments     MembershipRoleAssignment[]
+
+  @@unique([organizationId, name])
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@map("roles")
+}
+
+model Permission {
+  id              String           @id @default(uuid()) @db.Uuid
+  key             String           @unique @db.VarChar(100)
+  description     String?          @db.VarChar(500)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model MembershipRoleAssignment {
+  membershipId   String     @map("membership_id") @db.Uuid
+  roleId         String     @map("role_id") @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  membership     Membership @relation(fields: [membershipId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  role           Role       @relation(fields: [roleId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@id([membershipId, roleId])
+  @@index([roleId, organizationId])
+  @@map("membership_role_assignments")
 }
