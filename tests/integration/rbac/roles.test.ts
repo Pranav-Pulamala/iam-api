@@ -75,7 +75,7 @@ describe('organization role creation', () => {
 
     const body = errorResponseSchema.parse(parseJsonResponse(response.text));
 
-    expect(body.error.code).toBe('INSUFFICIENT_ORGANIZATION_ACCESS');
+    expect(body.error.code).toBe('INSUFFICIENT_PERMISSION');
   });
 
   it('rejects unauthenticated and invalid requests', async () => {
@@ -140,6 +140,9 @@ describe('organization role retrieval', () => {
     await addTestMember(organization.id, owner, member);
 
     const role = await createTestRole(organization.id, owner, 'Viewer');
+
+    await assignTestPermission(organization.id, role.id, 'role:read', owner);
+    await assignTestRole(organization.id, member.id, role.id, owner);
 
     const listResponse = await request(app)
       .get(`/api/v1/organizations/${organization.id}/roles`)

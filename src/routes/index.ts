@@ -21,4 +21,4 @@ apiV1Router.use('/organizations', organizationRouter);
 apiV1Router.use('/organizations', roleRouter);
 apiV1Router.use('/organizations', rolePermissionRouter);
 apiV1Router.use('/organizations', membershipRoleRouter);
-apiV1Router.use('/permissions', permissionRouter);
+apiV1Router.use('/organizations', permissionRouter);

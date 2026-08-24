@@ -2,7 +2,8 @@ import { Prisma } from '@prisma/client';
 
 import { AppError } from '../../errors/app-error.js';
 import { prisma } from '../../lib/prisma.js';
-import { requireOrganizationOwner, requireOrganizationRole } from './rbac-access.service.js';
+import type { PermissionKey } from '../authorization/permissions.js';
+import { requireOrganizationRole } from './rbac-access.service.js';
 import {
   serializePermission,
   serializeRolePermission,
@@ -23,10 +24,8 @@ export const listPermissions = async (): Promise<SerializedPermission[]> => {
 export const assignPermissionToRole = async (
   organizationId: string,
   roleId: string,
-  permissionKey: string,
-  currentUserId: string,
+  permissionKey: PermissionKey,
 ): Promise<SerializedRolePermission> => {
-  await requireOrganizationOwner(organizationId, currentUserId);
   await requireOrganizationRole(organizationId, roleId);
 
   const permission = await prisma.permission.findUnique({
@@ -69,10 +68,8 @@ export const assignPermissionToRole = async (
 export const removePermissionFromRole = async (
   organizationId: string,
   roleId: string,
-  permissionKey: string,
-  currentUserId: string,
+  permissionKey: PermissionKey,
 ): Promise<void> => {
-  await requireOrganizationOwner(organizationId, currentUserId);
   await requireOrganizationRole(organizationId, roleId);
 
   const permission = await prisma.permission.findUnique({

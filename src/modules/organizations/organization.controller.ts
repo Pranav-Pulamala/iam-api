@@ -75,9 +75,7 @@ export const getOne: RequestHandler = async (request, response) => {
 export const listMembers: RequestHandler = async (request, response) => {
   const unvalidatedParams: unknown = request.params;
   const params = organizationParamsSchema.parse(unvalidatedParams);
-  const currentUserId = getCurrentUserId(request.authenticatedUser);
-
-  const members = await listOrganizationMembers(params.organizationId, currentUserId);
+  const members = await listOrganizationMembers(params.organizationId);
 
   response.status(200).json({
     data: {
@@ -92,9 +90,8 @@ export const addMember: RequestHandler = async (request, response) => {
 
   const params = organizationParamsSchema.parse(unvalidatedParams);
   const input = addMemberRequestSchema.parse(unvalidatedBody);
-  const currentUserId = getCurrentUserId(request.authenticatedUser);
 
-  const membership = await addOrganizationMember(params.organizationId, currentUserId, input);
+  const membership = await addOrganizationMember(params.organizationId, input);
 
   response.status(201).json({
     data: {
@@ -106,9 +103,7 @@ export const addMember: RequestHandler = async (request, response) => {
 export const removeMember: RequestHandler = async (request, response) => {
   const unvalidatedParams: unknown = request.params;
   const params = removeMemberParamsSchema.parse(unvalidatedParams);
-  const currentUserId = getCurrentUserId(request.authenticatedUser);
-
-  await removeOrganizationMember(params.organizationId, params.userId, currentUserId);
+  await removeOrganizationMember(params.organizationId, params.userId);
 
   response.status(204).send();
 };
