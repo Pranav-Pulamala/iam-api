@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
@@ -23,13 +24,14 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('GET /api/v1/permissions', () => {
+describe('GET /api/v1/organizations/:organizationId/permissions', () => {
   it('returns unique seeded permissions in deterministic order', async () => {
-    const user = await registerTestUser();
+    const owner = await registerTestUser();
+    const organization = await createTestOrganization(owner);
 
     const response = await request(app)
-      .get('/api/v1/permissions')
-      .set('authorization', `Bearer ${user.accessToken}`);
+      .get(`/api/v1/organizations/${organization.id}/permissions`)
+      .set('authorization', `Bearer ${owner.accessToken}`);
 
     expect(response.status).toBe(200);
 
@@ -47,7 +49,7 @@ describe('GET /api/v1/permissions', () => {
   });
 
   it('requires authentication', async () => {
-    const response = await request(app).get('/api/v1/permissions');
+    const response = await request(app).get(`/api/v1/organizations/${randomUUID()}/permissions`);
 
     expect(response.status).toBe(401);
   });
@@ -131,11 +133,11 @@ describe('role permission assignments', () => {
         permissionKey: 'unknown:permission',
       });
 
-    expect(unknownResponse.status).toBe(404);
+    expect(unknownResponse.status).toBe(400);
 
     const body = errorResponseSchema.parse(parseJsonResponse(unknownResponse.text));
 
-    expect(body.error.code).toBe('PERMISSION_NOT_FOUND');
+    expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('prevents a MEMBER from assigning or removing permissions', async () => {

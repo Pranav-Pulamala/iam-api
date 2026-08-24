@@ -68,6 +68,7 @@ describe('membership custom-role assignments', () => {
     const supportRole = await createTestRole(organization.id, owner, 'Support Manager');
 
     await addTestMember(organization.id, owner, member);
+    await assignTestPermission(organization.id, billingRole.id, 'member:read', owner);
     await assignTestRole(organization.id, member.id, billingRole.id, owner);
     await assignTestRole(organization.id, member.id, supportRole.id, owner);
 
@@ -257,6 +258,7 @@ describe('membership custom-role assignments', () => {
 
     await addTestMember(organization.id, owner, member);
     await assignTestPermission(organization.id, role.id, 'organization:read', owner);
+    await assignTestPermission(organization.id, role.id, 'member:read', owner);
     await assignTestRole(organization.id, member.id, role.id, owner);
 
     const response = await request(app)

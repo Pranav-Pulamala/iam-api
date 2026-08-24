@@ -300,7 +300,7 @@ describe('GET /api/v1/organizations', () => {
 });
 
 describe('GET /api/v1/organizations/:organizationId', () => {
-  it('allows a member to retrieve the organization', async () => {
+  it('denies a member without organization:read', async () => {
     const owner = await registerTestUser();
     const member = await registerTestUser();
     const organization = await createTestOrganization(owner);
@@ -311,9 +311,11 @@ describe('GET /api/v1/organizations/:organizationId', () => {
       .get(`/api/v1/organizations/${organization.id}`)
       .set('authorization', `Bearer ${member.accessToken}`);
 
-    expect(response.status).toBe(200);
-    expect(response.text).toContain(organization.id);
-    expect(response.text).toContain('"role":"MEMBER"');
+    expect(response.status).toBe(403);
+
+    const body = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(body.error.code).toBe('INSUFFICIENT_PERMISSION');
   });
 
   it('hides a private organization from a non-member', async () => {
@@ -344,7 +346,7 @@ describe('GET /api/v1/organizations/:organizationId', () => {
 });
 
 describe('organization members', () => {
-  it('allows a member to list safe organization members', async () => {
+  it('denies a member without member:read', async () => {
     const owner = await registerTestUser();
     const member = await registerTestUser();
     const organization = await createTestOrganization(owner);
@@ -355,10 +357,11 @@ describe('organization members', () => {
       .get(`/api/v1/organizations/${organization.id}/members`)
       .set('authorization', `Bearer ${member.accessToken}`);
 
-    expect(response.status).toBe(200);
-    expect(response.text).toContain(owner.email);
-    expect(response.text).toContain(member.email);
-    expect(response.text).not.toContain('passwordHash');
+    expect(response.status).toBe(403);
+
+    const body = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(body.error.code).toBe('INSUFFICIENT_PERMISSION');
   });
 
   it('prevents a non-member from listing members', async () => {

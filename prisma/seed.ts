@@ -1,56 +1,10 @@
 import { PrismaClient } from '@prisma/client';
+import { PERMISSION_DEFINITIONS } from '../src/modules/authorization/permissions.js';
 
 const prisma = new PrismaClient();
 
-const permissions = [
-  {
-    key: 'organization:read',
-    description: 'View organization information.',
-  },
-  {
-    key: 'organization:update',
-    description: 'Update organization information.',
-  },
-  {
-    key: 'member:read',
-    description: 'View organization members.',
-  },
-  {
-    key: 'member:add',
-    description: 'Add organization members.',
-  },
-  {
-    key: 'member:remove',
-    description: 'Remove organization members.',
-  },
-  {
-    key: 'role:read',
-    description: 'View organization roles.',
-  },
-  {
-    key: 'role:create',
-    description: 'Create organization roles.',
-  },
-  {
-    key: 'role:update',
-    description: 'Update organization roles.',
-  },
-  {
-    key: 'role:delete',
-    description: 'Delete organization roles.',
-  },
-  {
-    key: 'role:assign',
-    description: 'Assign roles to organization members.',
-  },
-  {
-    key: 'permission:read',
-    description: 'View available permission definitions.',
-  },
-] as const;
-
 const seed = async (): Promise<void> => {
-  for (const permission of permissions) {
+  for (const permission of PERMISSION_DEFINITIONS) {
     await prisma.permission.upsert({
       where: {
         key: permission.key,
@@ -62,7 +16,7 @@ const seed = async (): Promise<void> => {
     });
   }
 
-  process.stdout.write(`Seeded ${String(permissions.length)} permission definitions.\n`);
+  process.stdout.write(`Seeded ${String(PERMISSION_DEFINITIONS.length)} permission definitions.\n`);
 };
 
 try {

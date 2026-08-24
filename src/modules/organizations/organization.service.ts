@@ -10,8 +10,8 @@ import type {
   OrganizationMember,
 } from './organization.types.js';
 import {
-  serializeOrganization,
   serializeMembership,
+  serializeOrganization,
   type SerializedMembership,
 } from './organization.types.js';
 
@@ -37,23 +37,6 @@ const requireOrganizationMembership = async (
 
   if (membership === null) {
     throw organizationNotFoundError();
-  }
-
-  return membership;
-};
-
-const requireOrganizationOwner = async (
-  organizationId: string,
-  userId: string,
-): Promise<Membership> => {
-  const membership = await requireOrganizationMembership(organizationId, userId);
-
-  if (membership.role !== MembershipRole.OWNER) {
-    throw new AppError({
-      statusCode: 403,
-      code: 'INSUFFICIENT_ORGANIZATION_ACCESS',
-      message: 'Organization owner access is required.',
-    });
   }
 
   return membership;
@@ -153,10 +136,7 @@ export const getOrganizationForUser = async (
 
 export const listOrganizationMembers = async (
   organizationId: string,
-  currentUserId: string,
 ): Promise<OrganizationMember[]> => {
-  await requireOrganizationMembership(organizationId, currentUserId);
-
   const memberships = await prisma.membership.findMany({
     where: {
       organizationId,
@@ -193,11 +173,8 @@ export const listOrganizationMembers = async (
 
 export const addOrganizationMember = async (
   organizationId: string,
-  currentUserId: string,
   input: AddMemberRequest,
 ): Promise<SerializedMembership> => {
-  await requireOrganizationOwner(organizationId, currentUserId);
-
   const targetUser = await prisma.user.findUnique({
     where: {
       id: input.userId,
@@ -242,10 +219,7 @@ export const addOrganizationMember = async (
 export const removeOrganizationMember = async (
   organizationId: string,
   targetUserId: string,
-  currentUserId: string,
 ): Promise<void> => {
-  await requireOrganizationOwner(organizationId, currentUserId);
-
   const targetMembership = await prisma.membership.findUnique({
     where: {
       userId_organizationId: {

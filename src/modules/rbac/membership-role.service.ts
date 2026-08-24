@@ -2,12 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { AppError } from '../../errors/app-error.js';
 import { prisma } from '../../lib/prisma.js';
-import {
-  requireOrganizationMembership,
-  requireOrganizationOwner,
-  requireOrganizationRole,
-  requireTargetMembership,
-} from './rbac-access.service.js';
+import { requireOrganizationRole, requireTargetMembership } from './rbac-access.service.js';
 import {
   roleWithPermissionsInclude,
   serializeMembershipRoleAssignment,
@@ -20,10 +15,7 @@ export const assignRoleToMembership = async (
   organizationId: string,
   targetUserId: string,
   roleId: string,
-  currentUserId: string,
 ): Promise<SerializedMembershipRoleAssignment> => {
-  await requireOrganizationOwner(organizationId, currentUserId);
-
   const [membership] = await Promise.all([
     requireTargetMembership(organizationId, targetUserId),
     requireOrganizationRole(organizationId, roleId),
@@ -57,10 +49,7 @@ export const removeRoleFromMembership = async (
   organizationId: string,
   targetUserId: string,
   roleId: string,
-  currentUserId: string,
 ): Promise<void> => {
-  await requireOrganizationOwner(organizationId, currentUserId);
-
   const [membership] = await Promise.all([
     requireTargetMembership(organizationId, targetUserId),
     requireOrganizationRole(organizationId, roleId),
@@ -86,10 +75,7 @@ export const removeRoleFromMembership = async (
 export const listMembershipRoles = async (
   organizationId: string,
   targetUserId: string,
-  currentUserId: string,
 ): Promise<SerializedRole[]> => {
-  await requireOrganizationMembership(organizationId, currentUserId);
-
   const membership = await requireTargetMembership(organizationId, targetUserId);
 
   const assignments = await prisma.membershipRoleAssignment.findMany({

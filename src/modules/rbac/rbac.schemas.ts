@@ -1,17 +1,16 @@
 import { z } from 'zod';
 
+import { PERMISSION_KEYS } from '../authorization/permissions.js';
+
 const organizationIdSchema = z.string().uuid('Organization ID must be a valid UUID.');
 
 const roleIdSchema = z.string().uuid('Role ID must be a valid UUID.');
 
 const userIdSchema = z.string().uuid('User ID must be a valid UUID.');
 
-const permissionKeySchema = z
-  .string()
-  .trim()
-  .min(3)
-  .max(100)
-  .regex(/^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/, 'Permission key must use resource:action format.');
+const permissionKeySchema = z.enum(PERMISSION_KEYS, {
+  error: 'Permission key must be a recognized permission.',
+});
 
 const roleNameSchema = z
   .string()
