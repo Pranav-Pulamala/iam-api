@@ -30,12 +30,14 @@ export interface SerializedSafeUser {
 export interface AuthenticationResult {
   user: SafeUser;
   accessToken: string;
+  refreshToken: string;
 }
 
 export interface AuthenticationResponse {
   data: {
     user: SerializedSafeUser;
     accessToken: string;
+    refreshToken: string;
   };
 }
 

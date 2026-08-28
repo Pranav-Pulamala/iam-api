@@ -30,6 +30,7 @@ const authenticationResponseSchema = z
       .object({
         user: serializedUserSchema,
         accessToken: z.string().min(1),
+        refreshToken: z.string().min(32),
       })
       .strict(),
   })
