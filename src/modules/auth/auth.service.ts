@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
 import { jwtVerify, SignJWT } from 'jose';
@@ -10,7 +11,8 @@ import {
   type LoginRequest,
   type RegisterRequest,
 } from './auth.schemas.js';
-import { toSafeUser, type AuthenticationResult, type SafeUser } from './auth.types.js';
+
+import { toSafeUser, type AuthenticatedIdentity, type AuthenticationResult } from './auth.types.js';
 
 const ARGON2_MEMORY_COST = 19_456;
 const ARGON2_TIME_COST = 2;
@@ -38,8 +40,10 @@ const createAuthenticationFailure = (): AppError =>
     message: 'Invalid email or password.',
   });
 
-const issueAccessToken = async (userId: string): Promise<string> =>
-  new SignJWT({})
+export const issueAccessToken = async (userId: string, sessionId: string): Promise<string> =>
+  new SignJWT({
+    sid: sessionId,
+  })
     .setProtectedHeader({
       alg: JWT_ALGORITHM,
       typ: 'JWT',
@@ -64,7 +68,7 @@ export const registerUser = async (input: RegisterRequest): Promise<Authenticati
 
     return {
       user: toSafeUser(user),
-      accessToken: await issueAccessToken(user.id),
+      accessToken: await issueAccessToken(user.id, randomUUID()),
     };
   } catch (error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -99,12 +103,15 @@ export const loginUser = async (input: LoginRequest): Promise<AuthenticationResu
 
   return {
     user: toSafeUser(user),
-    accessToken: await issueAccessToken(user.id),
+    accessToken: await issueAccessToken(user.id, randomUUID()),
   };
 };
 
-export const authenticateAccessToken = async (accessToken: string): Promise<SafeUser> => {
-  let subject: string;
+export const authenticateAccessToken = async (
+  accessToken: string,
+): Promise<AuthenticatedIdentity> => {
+  let userId: string;
+  let sessionId: string;
 
   try {
     const verification = await jwtVerify(accessToken, jwtSecret, {
@@ -114,12 +121,14 @@ export const authenticateAccessToken = async (accessToken: string): Promise<Safe
     });
 
     const parsedSubject = accessTokenSubjectSchema.safeParse(verification.payload.sub);
+    const parsedSessionId = accessTokenSubjectSchema.safeParse(verification.payload.sid);
 
-    if (!parsedSubject.success) {
-      throw new Error('JWT subject is missing or invalid.');
+    if (!parsedSubject.success || !parsedSessionId.success) {
+      throw new Error('JWT subject or session ID is missing or invalid.');
     }
 
-    subject = parsedSubject.data;
+    userId = parsedSubject.data;
+    sessionId = parsedSessionId.data;
   } catch (error: unknown) {
     throw new AppError({
       statusCode: 401,
@@ -131,7 +140,7 @@ export const authenticateAccessToken = async (accessToken: string): Promise<Safe
 
   const user = await prisma.user.findUnique({
     where: {
-      id: subject,
+      id: userId,
     },
   });
 
@@ -143,5 +152,8 @@ export const authenticateAccessToken = async (accessToken: string): Promise<Safe
     });
   }
 
-  return toSafeUser(user);
+  return {
+    user: toSafeUser(user),
+    sessionId,
+  };
 };

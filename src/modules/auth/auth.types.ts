@@ -11,6 +11,11 @@ export interface SafeUser {
   updatedAt: Date;
 }
 
+export interface AuthenticatedIdentity {
+  user: SafeUser;
+  sessionId: string;
+}
+
 export interface SerializedSafeUser {
   id: string;
   email: string;

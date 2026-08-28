@@ -32,7 +32,10 @@ export const authenticate: RequestHandler = async (request, response, next) => {
   }
 
   try {
-    request.authenticatedUser = await authenticateAccessToken(authorizationParts[1]);
+    const authenticatedIdentity = await authenticateAccessToken(authorizationParts[1]);
+
+    request.authenticatedUser = authenticatedIdentity.user;
+    request.authenticatedSessionId = authenticatedIdentity.sessionId;
 
     next();
   } catch (error: unknown) {
