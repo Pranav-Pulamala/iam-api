@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { SignJWT } from 'jose';
+import { decodeJwt, SignJWT } from 'jose';
 import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -118,6 +118,12 @@ describe('POST /api/v1/auth/register', () => {
 
     expect(responseBody.data.user.email).toBe(email);
     expect(responseBody.data.accessToken.length).toBeGreaterThan(0);
+    const accessTokenPayload = decodeJwt(responseBody.data.accessToken);
+
+    expect(accessTokenPayload.sub).toBe(responseBody.data.user.id);
+    expect(accessTokenPayload.sid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
 
     const storedUser = await prisma.user.findUniqueOrThrow({
       where: {
@@ -234,6 +240,12 @@ describe('POST /api/v1/auth/login', () => {
 
     expect(responseBody.data.user.email).toBe(email);
     expect(responseBody.data.accessToken.length).toBeGreaterThan(0);
+    const accessTokenPayload = decodeJwt(responseBody.data.accessToken);
+
+    expect(accessTokenPayload.sub).toBe(responseBody.data.user.id);
+    expect(accessTokenPayload.sid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
   });
 
   it('rejects an incorrect password', async () => {
@@ -366,6 +378,34 @@ describe('GET /api/v1/auth/me', () => {
     const response = await request(app)
       .get('/api/v1/auth/me')
       .set('authorization', 'Bearer invalid-token');
+
+    expect(response.status).toBe(401);
+
+    const responseBody = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(responseBody.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('rejects an otherwise valid token without a session ID claim', async () => {
+    const email = createTestEmail();
+    const registration = await registerTestUser(email);
+    const jwtSecret = new TextEncoder().encode(env.JWT_SECRET);
+
+    const tokenWithoutSessionId = await new SignJWT({})
+      .setProtectedHeader({
+        alg: 'HS256',
+        typ: 'JWT',
+      })
+      .setSubject(registration.data.user.id)
+      .setIssuer(env.JWT_ISSUER)
+      .setAudience(env.JWT_AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime('15m')
+      .sign(jwtSecret);
+
+    const response = await request(app)
+      .get('/api/v1/auth/me')
+      .set('authorization', `Bearer ${tokenWithoutSessionId}`);
 
     expect(response.status).toBe(401);
 
