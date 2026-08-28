@@ -8,3 +8,4 @@ process.env.JWT_SECRET = 'test-only-jwt-secret-that-is-longer-than-32-characters
 process.env.JWT_ACCESS_EXPIRES_IN = '15m';
 process.env.JWT_ISSUER = 'iam-api';
 process.env.JWT_AUDIENCE = 'iam-api-client';
+process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS = '30';

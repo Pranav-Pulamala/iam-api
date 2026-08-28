@@ -33,6 +33,7 @@ const environmentSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: jwtDurationSchema.default('15m'),
   JWT_ISSUER: z.string().trim().min(1).max(200).default('iam-api'),
   JWT_AUDIENCE: z.string().trim().min(1).max(200).default('iam-api-client'),
+  REFRESH_TOKEN_EXPIRES_IN_DAYS: z.coerce.number().int().min(1).max(365).default(30),
 });
 
 const parsedEnvironment = environmentSchema.safeParse(process.env);
