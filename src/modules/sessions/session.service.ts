@@ -1,4 +1,4 @@
-import type { Session } from '@prisma/client';
+import type { Prisma, Session } from '@prisma/client';
 
 import { env } from '../../config/env.js';
 import { generateRefreshToken, hashRefreshToken } from '../../lib/refresh-token.js';
@@ -8,6 +8,7 @@ import { serializeSession, type CreatedSession, type SessionMetadata } from './s
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const MAX_USER_AGENT_LENGTH = 512;
 const MAX_IP_ADDRESS_LENGTH = 45;
+type SessionDatabaseClient = Pick<Prisma.TransactionClient, 'session'>;
 
 export interface CreateSessionInput {
   userId: string;
@@ -34,12 +35,13 @@ export const calculateSessionExpiration = (createdAt: Date): Date =>
 export const createSession = async (
   input: CreateSessionInput,
   createdAt = new Date(),
+  database: SessionDatabaseClient = prisma,
 ): Promise<CreatedSession> => {
   const refreshToken = generateRefreshToken();
   const refreshTokenHash = hashRefreshToken(refreshToken);
   const expiresAt = calculateSessionExpiration(createdAt);
 
-  const session = await prisma.session.create({
+  const session = await database.session.create({
     data: {
       userId: input.userId,
       refreshTokenHash,

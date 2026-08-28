@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
 import { jwtVerify, SignJWT } from 'jose';
@@ -6,12 +5,13 @@ import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../../config/env.js';
 import { AppError } from '../../errors/app-error.js';
 import { prisma } from '../../lib/prisma.js';
+import { createSession } from '../sessions/session.service.js';
+import type { SessionMetadata } from '../sessions/session.types.js';
 import {
   accessTokenSubjectSchema,
   type LoginRequest,
   type RegisterRequest,
 } from './auth.schemas.js';
-
 import { toSafeUser, type AuthenticatedIdentity, type AuthenticationResult } from './auth.types.js';
 
 const ARGON2_MEMORY_COST = 19_456;
@@ -55,20 +55,40 @@ export const issueAccessToken = async (userId: string, sessionId: string): Promi
     .setExpirationTime(env.JWT_ACCESS_EXPIRES_IN)
     .sign(jwtSecret);
 
-export const registerUser = async (input: RegisterRequest): Promise<AuthenticationResult> => {
+export const registerUser = async (
+  input: RegisterRequest,
+  metadata: SessionMetadata,
+): Promise<AuthenticationResult> => {
   const passwordHash = await argon2.hash(input.password, passwordHashOptions);
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        email: input.email,
-        passwordHash,
-      },
+    const result = await prisma.$transaction(async (transaction) => {
+      const user = await transaction.user.create({
+        data: {
+          email: input.email,
+          passwordHash,
+        },
+      });
+
+      const createdSession = await createSession(
+        {
+          userId: user.id,
+          metadata,
+        },
+        new Date(),
+        transaction,
+      );
+
+      return {
+        user,
+        createdSession,
+      };
     });
 
     return {
-      user: toSafeUser(user),
-      accessToken: await issueAccessToken(user.id, randomUUID()),
+      user: toSafeUser(result.user),
+      accessToken: await issueAccessToken(result.user.id, result.createdSession.session.id),
+      refreshToken: result.createdSession.refreshToken,
     };
   } catch (error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -84,7 +104,10 @@ export const registerUser = async (input: RegisterRequest): Promise<Authenticati
   }
 };
 
-export const loginUser = async (input: LoginRequest): Promise<AuthenticationResult> => {
+export const loginUser = async (
+  input: LoginRequest,
+  metadata: SessionMetadata,
+): Promise<AuthenticationResult> => {
   const [user, dummyPasswordHash] = await Promise.all([
     prisma.user.findUnique({
       where: {
@@ -101,9 +124,15 @@ export const loginUser = async (input: LoginRequest): Promise<AuthenticationResu
     throw createAuthenticationFailure();
   }
 
+  const createdSession = await createSession({
+    userId: user.id,
+    metadata,
+  });
+
   return {
     user: toSafeUser(user),
-    accessToken: await issueAccessToken(user.id, randomUUID()),
+    accessToken: await issueAccessToken(user.id, createdSession.session.id),
+    refreshToken: createdSession.refreshToken,
   };
 };
 

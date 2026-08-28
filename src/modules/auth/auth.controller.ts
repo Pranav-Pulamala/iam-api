@@ -1,6 +1,7 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 
 import { AppError } from '../../errors/app-error.js';
+import type { SessionMetadata } from '../sessions/session.types.js';
 import { loginRequestSchema, registerRequestSchema } from './auth.schemas.js';
 import { loginUser, registerUser } from './auth.service.js';
 import {
@@ -9,15 +10,21 @@ import {
   type CurrentUserResponse,
 } from './auth.types.js';
 
+const getSessionMetadata = (request: Request): SessionMetadata => ({
+  userAgent: request.get('user-agent') ?? null,
+  ipAddress: request.ip ?? null,
+});
+
 export const register: RequestHandler = async (request, response) => {
   const unvalidatedBody: unknown = request.body;
   const input = registerRequestSchema.parse(unvalidatedBody);
-  const result = await registerUser(input);
+  const result = await registerUser(input, getSessionMetadata(request));
 
   const responseBody: AuthenticationResponse = {
     data: {
       user: serializeSafeUser(result.user),
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     },
   };
 
@@ -27,12 +34,13 @@ export const register: RequestHandler = async (request, response) => {
 export const login: RequestHandler = async (request, response) => {
   const unvalidatedBody: unknown = request.body;
   const input = loginRequestSchema.parse(unvalidatedBody);
-  const result = await loginUser(input);
+  const result = await loginUser(input, getSessionMetadata(request));
 
   const responseBody: AuthenticationResponse = {
     data: {
       user: serializeSafeUser(result.user),
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     },
   };
 
