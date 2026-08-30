@@ -2,8 +2,12 @@ import type { Request, RequestHandler } from 'express';
 
 import { AppError } from '../../errors/app-error.js';
 import type { SessionMetadata } from '../sessions/session.types.js';
-import { loginRequestSchema, registerRequestSchema } from './auth.schemas.js';
-import { loginUser, registerUser } from './auth.service.js';
+import {
+  loginRequestSchema,
+  refreshTokenRequestSchema,
+  registerRequestSchema,
+} from './auth.schemas.js';
+import { loginUser, refreshUserSession, registerUser } from './auth.service.js';
 import {
   serializeSafeUser,
   type AuthenticationResponse,
@@ -35,6 +39,22 @@ export const login: RequestHandler = async (request, response) => {
   const unvalidatedBody: unknown = request.body;
   const input = loginRequestSchema.parse(unvalidatedBody);
   const result = await loginUser(input, getSessionMetadata(request));
+
+  const responseBody: AuthenticationResponse = {
+    data: {
+      user: serializeSafeUser(result.user),
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    },
+  };
+
+  response.status(200).json(responseBody);
+};
+
+export const refresh: RequestHandler = async (request, response) => {
+  const unvalidatedBody: unknown = request.body;
+  const input = refreshTokenRequestSchema.parse(unvalidatedBody);
+  const result = await refreshUserSession(input, getSessionMetadata(request));
 
   const responseBody: AuthenticationResponse = {
     data: {

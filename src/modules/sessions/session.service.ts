@@ -3,11 +3,17 @@ import type { Prisma, Session } from '@prisma/client';
 import { env } from '../../config/env.js';
 import { generateRefreshToken, hashRefreshToken } from '../../lib/refresh-token.js';
 import { prisma } from '../../lib/prisma.js';
-import { serializeSession, type CreatedSession, type SessionMetadata } from './session.types.js';
+import {
+  serializeSession,
+  type CreatedSession,
+  type RotatedSession,
+  type SessionMetadata,
+} from './session.types.js';
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const MAX_USER_AGENT_LENGTH = 512;
 const MAX_IP_ADDRESS_LENGTH = 45;
+
 type SessionDatabaseClient = Pick<Prisma.TransactionClient, 'session'>;
 
 export interface CreateSessionInput {
@@ -64,6 +70,107 @@ export const findSessionByRefreshToken = async (refreshToken: string): Promise<S
     where: {
       refreshTokenHash,
     },
+  });
+};
+
+export const rotateSessionRefreshToken = async (
+  refreshToken: string,
+  metadata: SessionMetadata,
+  rotatedAt = new Date(),
+): Promise<RotatedSession | null> => {
+  const presentedTokenHash = hashRefreshToken(refreshToken);
+  const replacementRefreshToken = generateRefreshToken();
+  const replacementTokenHash = hashRefreshToken(replacementRefreshToken);
+
+  return prisma.$transaction(async (transaction) => {
+    const matchedSession = await transaction.session.findFirst({
+      where: {
+        OR: [
+          {
+            refreshTokenHash: presentedTokenHash,
+          },
+          {
+            previousRefreshTokenHash: presentedTokenHash,
+          },
+        ],
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (matchedSession === null) {
+      return null;
+    }
+
+    const replayDetected = matchedSession.previousRefreshTokenHash === presentedTokenHash;
+
+    if (replayDetected) {
+      await transaction.session.updateMany({
+        where: {
+          userId: matchedSession.userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: rotatedAt,
+        },
+      });
+
+      return null;
+    }
+
+    if (
+      matchedSession.refreshTokenHash !== presentedTokenHash ||
+      matchedSession.revokedAt !== null ||
+      matchedSession.expiresAt.getTime() <= rotatedAt.getTime() ||
+      !matchedSession.user.isActive
+    ) {
+      return null;
+    }
+
+    const rotation = await transaction.session.updateMany({
+      where: {
+        id: matchedSession.id,
+        refreshTokenHash: presentedTokenHash,
+        revokedAt: null,
+        expiresAt: {
+          gt: rotatedAt,
+        },
+      },
+      data: {
+        refreshTokenHash: replacementTokenHash,
+        previousRefreshTokenHash: presentedTokenHash,
+        lastUsedAt: rotatedAt,
+        userAgent: normalizeMetadataValue(metadata.userAgent, MAX_USER_AGENT_LENGTH),
+        ipAddress: normalizeMetadataValue(metadata.ipAddress, MAX_IP_ADDRESS_LENGTH),
+      },
+    });
+
+    if (rotation.count !== 1) {
+      await transaction.session.updateMany({
+        where: {
+          userId: matchedSession.userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: rotatedAt,
+        },
+      });
+
+      return null;
+    }
+
+    const rotatedSession = await transaction.session.findUniqueOrThrow({
+      where: {
+        id: matchedSession.id,
+      },
+    });
+
+    return {
+      session: rotatedSession,
+      user: matchedSession.user,
+      refreshToken: replacementRefreshToken,
+    };
   });
 };
 

@@ -35,7 +35,14 @@ export const loginRequestSchema = z
   })
   .strict();
 
+export const refreshTokenRequestSchema = z
+  .object({
+    refreshToken: z.string().trim().min(32).max(512),
+  })
+  .strict();
+
 export const accessTokenSubjectSchema = z.string().uuid();
 
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type RefreshTokenRequest = z.infer<typeof refreshTokenRequestSchema>;

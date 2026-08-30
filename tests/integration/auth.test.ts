@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { app } from '../../src/app.js';
 import { env } from '../../src/config/env.js';
+import { hashRefreshToken } from '../../src/lib/refresh-token.js';
 import { prisma } from '../../src/lib/prisma.js';
 
 const testEmails = new Set<string>();
@@ -105,13 +106,16 @@ afterAll(async () => {
 });
 
 describe('POST /api/v1/auth/register', () => {
-  it('registers a user and returns a safe user with an access token', async () => {
+  it('registers a user and creates a persistent session', async () => {
     const email = createTestEmail();
 
-    const response = await request(app).post('/api/v1/auth/register').send({
-      email,
-      password: 'StrongPassword123!',
-    });
+    const response = await request(app)
+      .post('/api/v1/auth/register')
+      .set('user-agent', 'iam-api-registration-test')
+      .send({
+        email,
+        password: 'StrongPassword123!',
+      });
 
     expect(response.status).toBe(201);
 
@@ -119,12 +123,12 @@ describe('POST /api/v1/auth/register', () => {
 
     expect(responseBody.data.user.email).toBe(email);
     expect(responseBody.data.accessToken.length).toBeGreaterThan(0);
+    expect(responseBody.data.refreshToken.length).toBeGreaterThanOrEqual(32);
+
     const accessTokenPayload = decodeJwt(responseBody.data.accessToken);
+    const sessionId = z.string().uuid().parse(accessTokenPayload.sid);
 
     expect(accessTokenPayload.sub).toBe(responseBody.data.user.id);
-    expect(accessTokenPayload.sid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
 
     const storedUser = await prisma.user.findUniqueOrThrow({
       where: {
@@ -134,6 +138,21 @@ describe('POST /api/v1/auth/register', () => {
 
     expect(storedUser.passwordHash).not.toBe('StrongPassword123!');
     expect(storedUser.passwordHash.startsWith('$argon2id$')).toBe(true);
+
+    const storedSession = await prisma.session.findUniqueOrThrow({
+      where: {
+        id: sessionId,
+      },
+    });
+
+    expect(storedSession.userId).toBe(storedUser.id);
+    expect(storedSession.refreshTokenHash).toBe(hashRefreshToken(responseBody.data.refreshToken));
+    expect(storedSession.refreshTokenHash).not.toBe(responseBody.data.refreshToken);
+    expect(storedSession.userAgent).toBe('iam-api-registration-test');
+    expect(storedSession.ipAddress).not.toBeNull();
+    expect(storedSession.revokedAt).toBeNull();
+    expect(storedSession.lastUsedAt).toBeNull();
+    expect(storedSession.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
   it('trims and lowercases an email before storage', async () => {
@@ -206,7 +225,7 @@ describe('POST /api/v1/auth/register', () => {
     expect(responseBody.error.code).toBe('EMAIL_ALREADY_REGISTERED');
   });
 
-  it('does not return the password hash', async () => {
+  it('does not return the password or refresh-token hash', async () => {
     const email = createTestEmail();
 
     const response = await request(app).post('/api/v1/auth/register').send({
@@ -215,21 +234,23 @@ describe('POST /api/v1/auth/register', () => {
     });
 
     expect(response.status).toBe(201);
-    expect(() =>
-      authenticationResponseSchema.parse(parseJsonResponse(response.text)),
-    ).not.toThrow();
+
+    const responseBody = authenticationResponseSchema.parse(parseJsonResponse(response.text));
+
     expect(response.text).not.toContain('passwordHash');
     expect(response.text).not.toContain('StrongPassword123!');
+    expect(response.text).not.toContain(hashRefreshToken(responseBody.data.refreshToken));
   });
 });
 
 describe('POST /api/v1/auth/login', () => {
-  it('logs in with valid credentials', async () => {
+  it('logs in and creates a separate persistent session', async () => {
     const email = createTestEmail();
     await registerTestUser(email);
 
     const response = await request(app)
       .post('/api/v1/auth/login')
+      .set('user-agent', 'iam-api-login-test')
       .send({
         email: `  ${email.toUpperCase()}  `,
         password: 'StrongPassword123!',
@@ -239,14 +260,29 @@ describe('POST /api/v1/auth/login', () => {
 
     const responseBody = authenticationResponseSchema.parse(parseJsonResponse(response.text));
 
-    expect(responseBody.data.user.email).toBe(email);
-    expect(responseBody.data.accessToken.length).toBeGreaterThan(0);
     const accessTokenPayload = decodeJwt(responseBody.data.accessToken);
+    const sessionId = z.string().uuid().parse(accessTokenPayload.sid);
 
+    expect(responseBody.data.user.email).toBe(email);
     expect(accessTokenPayload.sub).toBe(responseBody.data.user.id);
-    expect(accessTokenPayload.sid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
+
+    const storedSession = await prisma.session.findUniqueOrThrow({
+      where: {
+        id: sessionId,
+      },
+    });
+
+    expect(storedSession.userId).toBe(responseBody.data.user.id);
+    expect(storedSession.refreshTokenHash).toBe(hashRefreshToken(responseBody.data.refreshToken));
+    expect(storedSession.userAgent).toBe('iam-api-login-test');
+
+    const sessionCount = await prisma.session.count({
+      where: {
+        userId: responseBody.data.user.id,
+      },
+    });
+
+    expect(sessionCount).toBe(2);
   });
 
   it('rejects an incorrect password', async () => {
@@ -328,11 +364,188 @@ describe('POST /api/v1/auth/login', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(() =>
-      authenticationResponseSchema.parse(parseJsonResponse(response.text)),
-    ).not.toThrow();
+
+    const responseBody = authenticationResponseSchema.parse(parseJsonResponse(response.text));
+
     expect(response.text).not.toContain('passwordHash');
     expect(response.text).not.toContain('StrongPassword123!');
+    expect(response.text).not.toContain(hashRefreshToken(responseBody.data.refreshToken));
+  });
+});
+
+describe('POST /api/v1/auth/refresh', () => {
+  it('rotates the refresh token and issues a new access token', async () => {
+    const email = createTestEmail();
+    const registration = await registerTestUser(email);
+    const originalAccessPayload = decodeJwt(registration.data.accessToken);
+    const sessionId = z.string().uuid().parse(originalAccessPayload.sid);
+
+    const response = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('user-agent', 'iam-api-refresh-test')
+      .send({
+        refreshToken: registration.data.refreshToken,
+      });
+
+    expect(response.status).toBe(200);
+
+    const responseBody = authenticationResponseSchema.parse(parseJsonResponse(response.text));
+    const replacementAccessPayload = decodeJwt(responseBody.data.accessToken);
+
+    expect(responseBody.data.user.id).toBe(registration.data.user.id);
+    expect(responseBody.data.refreshToken).not.toBe(registration.data.refreshToken);
+    expect(replacementAccessPayload.sub).toBe(registration.data.user.id);
+    expect(replacementAccessPayload.sid).toBe(sessionId);
+
+    const storedSession = await prisma.session.findUniqueOrThrow({
+      where: {
+        id: sessionId,
+      },
+    });
+
+    expect(storedSession.refreshTokenHash).toBe(hashRefreshToken(responseBody.data.refreshToken));
+    expect(storedSession.previousRefreshTokenHash).toBe(
+      hashRefreshToken(registration.data.refreshToken),
+    );
+    expect(storedSession.refreshTokenHash).not.toBe(responseBody.data.refreshToken);
+    expect(storedSession.lastUsedAt).not.toBeNull();
+    expect(storedSession.userAgent).toBe('iam-api-refresh-test');
+    expect(storedSession.revokedAt).toBeNull();
+  });
+
+  it('rejects a malformed request body', async () => {
+    const response = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: '',
+    });
+
+    expect(response.status).toBe(400);
+
+    const responseBody = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(responseBody.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects an unknown refresh token', async () => {
+    const response = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: 'unknown-refresh-token-that-is-long-enough-for-validation',
+    });
+
+    expect(response.status).toBe(401);
+
+    const responseBody = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(responseBody.error.code).toBe('INVALID_REFRESH_TOKEN');
+    expect(responseBody.error.message).toBe('Refresh token is invalid or expired.');
+  });
+
+  it('rejects an expired session', async () => {
+    const email = createTestEmail();
+    const registration = await registerTestUser(email);
+    const accessPayload = decodeJwt(registration.data.accessToken);
+    const sessionId = z.string().uuid().parse(accessPayload.sid);
+
+    await prisma.session.update({
+      where: {
+        id: sessionId,
+      },
+      data: {
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+
+    const response = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: registration.data.refreshToken,
+    });
+
+    expect(response.status).toBe(401);
+
+    const responseBody = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(responseBody.error.code).toBe('INVALID_REFRESH_TOKEN');
+    expect(responseBody.error.message).toBe('Refresh token is invalid or expired.');
+  });
+
+  it('rejects a revoked session', async () => {
+    const email = createTestEmail();
+    const registration = await registerTestUser(email);
+    const accessPayload = decodeJwt(registration.data.accessToken);
+    const sessionId = z.string().uuid().parse(accessPayload.sid);
+
+    await prisma.session.update({
+      where: {
+        id: sessionId,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    const response = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: registration.data.refreshToken,
+    });
+
+    expect(response.status).toBe(401);
+
+    const responseBody = errorResponseSchema.parse(parseJsonResponse(response.text));
+
+    expect(responseBody.error.code).toBe('INVALID_REFRESH_TOKEN');
+    expect(responseBody.error.message).toBe('Refresh token is invalid or expired.');
+  });
+
+  it('detects replay and revokes all active sessions', async () => {
+    const email = createTestEmail();
+    const registration = await registerTestUser(email);
+
+    const loginResponse = await request(app).post('/api/v1/auth/login').send({
+      email,
+      password: 'StrongPassword123!',
+    });
+
+    expect(loginResponse.status).toBe(200);
+
+    const loginBody = authenticationResponseSchema.parse(parseJsonResponse(loginResponse.text));
+
+    const rotationResponse = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: registration.data.refreshToken,
+    });
+
+    expect(rotationResponse.status).toBe(200);
+
+    const rotationBody = authenticationResponseSchema.parse(
+      parseJsonResponse(rotationResponse.text),
+    );
+
+    const replayResponse = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: registration.data.refreshToken,
+    });
+
+    expect(replayResponse.status).toBe(401);
+
+    const replayBody = errorResponseSchema.parse(parseJsonResponse(replayResponse.text));
+
+    expect(replayBody.error.code).toBe('INVALID_REFRESH_TOKEN');
+    expect(replayBody.error.message).toBe('Refresh token is invalid or expired.');
+
+    const activeSessionCount = await prisma.session.count({
+      where: {
+        userId: registration.data.user.id,
+        revokedAt: null,
+      },
+    });
+
+    expect(activeSessionCount).toBe(0);
+
+    const rotatedTokenResponse = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: rotationBody.data.refreshToken,
+    });
+
+    expect(rotatedTokenResponse.status).toBe(401);
+
+    const secondSessionResponse = await request(app).post('/api/v1/auth/refresh').send({
+      refreshToken: loginBody.data.refreshToken,
+    });
+
+    expect(secondSessionResponse.status).toBe(401);
   });
 });
 
