@@ -7,7 +7,7 @@ import {
   refreshTokenRequestSchema,
   registerRequestSchema,
 } from './auth.schemas.js';
-import { loginUser, refreshUserSession, registerUser } from './auth.service.js';
+import { loginUser, logoutUserSession, refreshUserSession, registerUser } from './auth.service.js';
 import {
   serializeSafeUser,
   type AuthenticationResponse,
@@ -18,6 +18,13 @@ const getSessionMetadata = (request: Request): SessionMetadata => ({
   userAgent: request.get('user-agent') ?? null,
   ipAddress: request.ip ?? null,
 });
+
+const createUnauthorizedError = (): AppError =>
+  new AppError({
+    statusCode: 401,
+    code: 'UNAUTHORIZED',
+    message: 'Authentication is required.',
+  });
 
 export const register: RequestHandler = async (request, response) => {
   const unvalidatedBody: unknown = request.body;
@@ -67,15 +74,24 @@ export const refresh: RequestHandler = async (request, response) => {
   response.status(200).json(responseBody);
 };
 
+export const logout: RequestHandler = async (request, response) => {
+  const authenticatedUser = request.authenticatedUser;
+  const authenticatedSessionId = request.authenticatedSessionId;
+
+  if (authenticatedUser === undefined || authenticatedSessionId === undefined) {
+    throw createUnauthorizedError();
+  }
+
+  await logoutUserSession(authenticatedUser.id, authenticatedSessionId);
+
+  response.status(204).send();
+};
+
 export const getCurrentUser: RequestHandler = (request, response) => {
   const authenticatedUser = request.authenticatedUser;
 
   if (authenticatedUser === undefined) {
-    throw new AppError({
-      statusCode: 401,
-      code: 'UNAUTHORIZED',
-      message: 'Authentication is required.',
-    });
+    throw createUnauthorizedError();
   }
 
   const responseBody: CurrentUserResponse = {

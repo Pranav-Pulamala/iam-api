@@ -174,5 +174,22 @@ export const rotateSessionRefreshToken = async (
   });
 };
 
+export const revokeSession = async (
+  userId: string,
+  sessionId: string,
+  revokedAt = new Date(),
+): Promise<void> => {
+  await prisma.session.updateMany({
+    where: {
+      id: sessionId,
+      userId,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt,
+    },
+  });
+};
+
 export const isSessionActive = (session: Session, checkedAt = new Date()): boolean =>
   session.revokedAt === null && session.expiresAt.getTime() > checkedAt.getTime();

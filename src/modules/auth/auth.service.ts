@@ -5,7 +5,11 @@ import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../../config/env.js';
 import { AppError } from '../../errors/app-error.js';
 import { prisma } from '../../lib/prisma.js';
-import { createSession, rotateSessionRefreshToken } from '../sessions/session.service.js';
+import {
+  createSession,
+  revokeSession,
+  rotateSessionRefreshToken,
+} from '../sessions/session.service.js';
 import type { SessionMetadata } from '../sessions/session.types.js';
 import {
   accessTokenSubjectSchema,
@@ -46,6 +50,13 @@ const createRefreshTokenFailure = (): AppError =>
     statusCode: 401,
     code: 'INVALID_REFRESH_TOKEN',
     message: 'Refresh token is invalid or expired.',
+  });
+
+const createUnauthorizedError = (): AppError =>
+  new AppError({
+    statusCode: 401,
+    code: 'UNAUTHORIZED',
+    message: 'Authentication is required.',
   });
 
 export const issueAccessToken = async (userId: string, sessionId: string): Promise<string> =>
@@ -161,6 +172,10 @@ export const refreshUserSession = async (
   };
 };
 
+export const logoutUserSession = async (userId: string, sessionId: string): Promise<void> => {
+  await revokeSession(userId, sessionId);
+};
+
 export const authenticateAccessToken = async (
   accessToken: string,
 ): Promise<AuthenticatedIdentity> => {
@@ -192,22 +207,26 @@ export const authenticateAccessToken = async (
     });
   }
 
-  const user = await prisma.user.findUnique({
+  const session = await prisma.session.findFirst({
     where: {
-      id: userId,
+      id: sessionId,
+      userId,
+      revokedAt: null,
+      expiresAt: {
+        gt: new Date(),
+      },
+    },
+    include: {
+      user: true,
     },
   });
 
-  if (user?.isActive !== true) {
-    throw new AppError({
-      statusCode: 401,
-      code: 'UNAUTHORIZED',
-      message: 'Authentication is required.',
-    });
+  if (session?.user.isActive !== true) {
+    throw createUnauthorizedError();
   }
 
   return {
-    user: toSafeUser(user),
-    sessionId,
+    user: toSafeUser(session.user),
+    sessionId: session.id,
   };
 };
