@@ -1,4 +1,4 @@
-import type { Request, RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 
 import { AppError } from '../../errors/app-error.js';
 import type { SessionMetadata } from '../sessions/session.types.js';
@@ -11,6 +11,7 @@ import { loginUser, logoutUserSession, refreshUserSession, registerUser } from '
 import {
   serializeSafeUser,
   type AuthenticationResponse,
+  type AuthenticationResult,
   type CurrentUserResponse,
 } from './auth.types.js';
 
@@ -26,11 +27,11 @@ const createUnauthorizedError = (): AppError =>
     message: 'Authentication is required.',
   });
 
-export const register: RequestHandler = async (request, response) => {
-  const unvalidatedBody: unknown = request.body;
-  const input = registerRequestSchema.parse(unvalidatedBody);
-  const result = await registerUser(input, getSessionMetadata(request));
-
+const sendAuthenticationResponse = (
+  response: Response,
+  statusCode: 200 | 201,
+  result: AuthenticationResult,
+): void => {
   const responseBody: AuthenticationResponse = {
     data: {
       user: serializeSafeUser(result.user),
@@ -39,7 +40,17 @@ export const register: RequestHandler = async (request, response) => {
     },
   };
 
-  response.status(201).json(responseBody);
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('Pragma', 'no-cache');
+  response.status(statusCode).json(responseBody);
+};
+
+export const register: RequestHandler = async (request, response) => {
+  const unvalidatedBody: unknown = request.body;
+  const input = registerRequestSchema.parse(unvalidatedBody);
+  const result = await registerUser(input, getSessionMetadata(request));
+
+  sendAuthenticationResponse(response, 201, result);
 };
 
 export const login: RequestHandler = async (request, response) => {
@@ -47,15 +58,7 @@ export const login: RequestHandler = async (request, response) => {
   const input = loginRequestSchema.parse(unvalidatedBody);
   const result = await loginUser(input, getSessionMetadata(request));
 
-  const responseBody: AuthenticationResponse = {
-    data: {
-      user: serializeSafeUser(result.user),
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    },
-  };
-
-  response.status(200).json(responseBody);
+  sendAuthenticationResponse(response, 200, result);
 };
 
 export const refresh: RequestHandler = async (request, response) => {
@@ -63,15 +66,7 @@ export const refresh: RequestHandler = async (request, response) => {
   const input = refreshTokenRequestSchema.parse(unvalidatedBody);
   const result = await refreshUserSession(input, getSessionMetadata(request));
 
-  const responseBody: AuthenticationResponse = {
-    data: {
-      user: serializeSafeUser(result.user),
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    },
-  };
-
-  response.status(200).json(responseBody);
+  sendAuthenticationResponse(response, 200, result);
 };
 
 export const logout: RequestHandler = async (request, response) => {
