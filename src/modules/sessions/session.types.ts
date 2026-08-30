@@ -28,6 +28,12 @@ export interface RotatedSession {
   refreshToken: string;
 }
 
+export interface SessionListResponse {
+  data: {
+    sessions: SafeSession[];
+  };
+}
+
 export const serializeSession = (
   session: Session,
   currentSessionId: string | null,
