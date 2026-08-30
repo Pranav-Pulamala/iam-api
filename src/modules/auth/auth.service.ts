@@ -5,11 +5,12 @@ import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../../config/env.js';
 import { AppError } from '../../errors/app-error.js';
 import { prisma } from '../../lib/prisma.js';
-import { createSession } from '../sessions/session.service.js';
+import { createSession, rotateSessionRefreshToken } from '../sessions/session.service.js';
 import type { SessionMetadata } from '../sessions/session.types.js';
 import {
   accessTokenSubjectSchema,
   type LoginRequest,
+  type RefreshTokenRequest,
   type RegisterRequest,
 } from './auth.schemas.js';
 import { toSafeUser, type AuthenticatedIdentity, type AuthenticationResult } from './auth.types.js';
@@ -38,6 +39,13 @@ const createAuthenticationFailure = (): AppError =>
     statusCode: 401,
     code: 'INVALID_CREDENTIALS',
     message: 'Invalid email or password.',
+  });
+
+const createRefreshTokenFailure = (): AppError =>
+  new AppError({
+    statusCode: 401,
+    code: 'INVALID_REFRESH_TOKEN',
+    message: 'Refresh token is invalid or expired.',
   });
 
 export const issueAccessToken = async (userId: string, sessionId: string): Promise<string> =>
@@ -133,6 +141,23 @@ export const loginUser = async (
     user: toSafeUser(user),
     accessToken: await issueAccessToken(user.id, createdSession.session.id),
     refreshToken: createdSession.refreshToken,
+  };
+};
+
+export const refreshUserSession = async (
+  input: RefreshTokenRequest,
+  metadata: SessionMetadata,
+): Promise<AuthenticationResult> => {
+  const rotation = await rotateSessionRefreshToken(input.refreshToken, metadata);
+
+  if (rotation === null) {
+    throw createRefreshTokenFailure();
+  }
+
+  return {
+    user: toSafeUser(rotation.user),
+    accessToken: await issueAccessToken(rotation.user.id, rotation.session.id),
+    refreshToken: rotation.refreshToken,
   };
 };
 

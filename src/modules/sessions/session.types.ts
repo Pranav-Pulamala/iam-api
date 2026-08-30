@@ -1,4 +1,4 @@
-import type { Session } from '@prisma/client';
+import type { Session, User } from '@prisma/client';
 
 export interface SessionMetadata {
   userAgent: string | null;
@@ -19,6 +19,12 @@ export interface SafeSession {
 
 export interface CreatedSession {
   session: SafeSession;
+  refreshToken: string;
+}
+
+export interface RotatedSession {
+  session: Session;
+  user: User;
   refreshToken: string;
 }
 
