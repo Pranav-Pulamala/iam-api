@@ -7,6 +7,7 @@ import {
   serializeSession,
   type CreatedSession,
   type RotatedSession,
+  type SafeSession,
   type SessionMetadata,
 } from './session.types.js';
 
@@ -189,6 +190,27 @@ export const revokeSession = async (
       revokedAt,
     },
   });
+};
+
+export const listUserSessions = async (
+  userId: string,
+  currentSessionId: string,
+): Promise<SafeSession[]> => {
+  const sessions = await prisma.session.findMany({
+    where: {
+      userId,
+    },
+    orderBy: [
+      {
+        createdAt: 'desc',
+      },
+      {
+        id: 'desc',
+      },
+    ],
+  });
+
+  return sessions.map((session) => serializeSession(session, currentSessionId));
 };
 
 export const isSessionActive = (session: Session, checkedAt = new Date()): boolean =>
