@@ -213,5 +213,45 @@ export const listUserSessions = async (
   return sessions.map((session) => serializeSession(session, currentSessionId));
 };
 
+export const revokeUserSession = async (
+  userId: string,
+  sessionId: string,
+  revokedAt = new Date(),
+): Promise<boolean> => {
+  const result = await prisma.session.updateMany({
+    where: {
+      id: sessionId,
+      userId,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt,
+    },
+  });
+
+  return result.count === 1;
+};
+
+export const revokeOtherSessions = async (
+  userId: string,
+  currentSessionId: string,
+  revokedAt = new Date(),
+): Promise<number> => {
+  const result = await prisma.session.updateMany({
+    where: {
+      userId,
+      id: {
+        not: currentSessionId,
+      },
+      revokedAt: null,
+    },
+    data: {
+      revokedAt,
+    },
+  });
+
+  return result.count;
+};
+
 export const isSessionActive = (session: Session, checkedAt = new Date()): boolean =>
   session.revokedAt === null && session.expiresAt.getTime() > checkedAt.getTime();
