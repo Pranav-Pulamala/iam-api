@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Production-quality multi-tenant Identity and Access Management API",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=22.0.0"
   },
