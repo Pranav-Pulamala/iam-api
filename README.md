@@ -18,7 +18,7 @@ The API supports the following workflows:
 - Assign permissions to roles
 - Assign roles to organization members
 - Enforce permissions on protected operations
-- List and revoke a user’s active sessions
+- List and manage a user’s sessions
 
 ## Authentication
 
@@ -52,10 +52,10 @@ Each session records:
 
 - the user who owns it;
 - its current refresh-token hash;
-- its previous refresh-token hash;
+- its previous refresh-token hash after token rotation, when available;
 - when it was created;
 - when it expires;
-- whether it has been revoked;
+- whether and when it was revoked;
 - when it was last used;
 - user-agent metadata; and
 - IP-address metadata.
@@ -207,7 +207,7 @@ DELETE /api/v1/organizations/:organizationId/roles/:roleId
 ### Permissions
 
 ```text
-GET /api/v1/permissions
+GET /api/v1/organizations/:organizationId/permissions
 
 POST   /api/v1/organizations/:organizationId/roles/:roleId/permissions
 DELETE /api/v1/organizations/:organizationId/roles/:roleId/permissions/:permissionKey
@@ -501,6 +501,10 @@ src/
 tests/
   integration/
     rbac/
+      membership-roles.test.ts
+      permissions.test.ts
+      rbac-test-helpers.ts
+      roles.test.ts
     auth-security.test.ts
     auth.test.ts
     authorization.test.ts
@@ -613,13 +617,14 @@ logic.
 
 The application does not return password hashes in API responses.
 
-Application logs do not include:
+The structured request logger records request metadata without logging request bodies or authorization headers. Pino redaction is configured for:
 
 - passwords;
 - password hashes;
 - authorization headers;
-- raw refresh tokens; or
-- complete JWT access tokens.
+- cookies;
+- access tokens; and
+- refresh tokens.
 
 ## Validation
 
