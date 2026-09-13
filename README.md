@@ -644,17 +644,6 @@ npm run build
 This sequence checks the Prisma schema, generated database types, formatting, lint rules, strict
 TypeScript types, automated behavior, and the production build.
 
-## Milestone history
-
-This project was developed through separately committed milestones:
-
-1. API and database foundation
-2. User authentication
-3. Organizations and memberships
-4. Role-based access control
-5. Permission-based authorization
-6. Persistent sessions and refresh-token security
-
 ## License
 
 This project is available under the [MIT License](LICENSE).
